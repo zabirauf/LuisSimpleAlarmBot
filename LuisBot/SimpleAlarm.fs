@@ -8,7 +8,6 @@ open Microsoft.Bot.Builder.Luis.Models
 open Microsoft.FSharp.Linq.NullableOperators
 
 open System
-open System.Collections.Generic
 open System.Net
 open System.Threading.Tasks
 
@@ -22,7 +21,7 @@ module SimpleAlarm =
         What : string;
     }
 
-    type AlarmMap = Dictionary<string, Alarm>
+    type AlarmMap = Map<string, Alarm>
 
     type TimeRemainingInAlarm =
         | AlarmNotFound
@@ -51,16 +50,12 @@ module SimpleAlarm =
                 | (true, title) -> title.Entity
                 | (false, _) -> defaultAlarm.What
 
-            match alarmMap.TryGetValue(title) with
-            | (true, alarm) -> Some alarm
-            | (false, _) -> None
+            alarmMap.TryFind(title)
 
         let deleteAlarm (result : LuisResult) (alarmMap : AlarmMap) =
 
             match tryFindAlarm result alarmMap with
-            | Some alarm -> 
-                alarmMap.Remove alarm.What |> ignore
-                Some (alarm, alarmMap)
+            | Some alarm -> Some (alarm, alarmMap.Remove alarm.What)
             | None -> None
 
         let setAlarm (result : LuisResult) (alarmMap : AlarmMap) =
@@ -93,8 +88,7 @@ module SimpleAlarm =
                 | Some alarm -> 
                     let snoozedTime = 7.0 |> TimeSpan.FromMinutes |> alarm.When.Add
                     let snoozedAlarm = { alarm with When = snoozedTime } 
-                    alarmMap.Add(snoozedAlarm.What, snoozedAlarm)
-                    Some (alarmMap, alarm)
+                    Some (alarmMap.Add(snoozedAlarm.What, snoozedAlarm), alarm)
                 | None -> None
 
         let timeRemainingForAlarm (result : LuisResult) (alarmMap : AlarmMap) =
@@ -106,8 +100,7 @@ module SimpleAlarm =
         let turnOffAlarm (result : LuisResult) (alarmMap : AlarmMap) = 
             match tryFindAlarm result alarmMap with
             | Some alarm -> 
-                alarmMap.Remove(alarm.What) |> ignore
-                Some (alarmMap, alarm)
+                Some (alarmMap.Remove(alarm.What), alarm)
             | None -> None
 
     [<LuisModel("c413b2ef-382c-45bd-8ff0-f76d60e2a821", "6d0966209c6e4f6b835ce34492f3e6d9")>]
@@ -124,7 +117,7 @@ module SimpleAlarm =
         //    messageReceivedCallback |> context.Wait
         //}
         
-        member val alarmMap = Dictionary<string, Alarm>() with get, set
+        member val alarmMap = Map.empty<string, Alarm> with get, set
 
         member this.MessageReceived context messageActivity = 
             printf "--> Message received"
