@@ -36,41 +36,6 @@ module LuisBot =
             
         let awaitTask = Async.AwaitIAsyncResult >> Async.Ignore
       
-//    [<Serializable>]
-//    type MyBot() =
-//        member val count = 1 with get, set
-//
-//        member this.MessageRecived (ctx : IDialogContext) (a : IAwaitable<IMessageActivity>) = 
-//            Task.Factory.StartNew(fun () ->
-//                let msg = a.GetAwaiter().GetResult()
-//
-//                match msg.Text with
-//                | "reset" -> PromptDialog.Confirm(ctx, ResumeAfter(this.AfterResetAsync), "Are you sure you want to reset the count?", "Didn't get that!", promptStyle=PromptStyle.None) |> ignore
-//                | _ -> 
-//                    this.count <- this.count + 1
-//                    (sprintf "%i: You said %s" this.count msg.Text) |> ctx.PostAsync |> ignore
-//                    ResumeAfter(this.MessageRecived) |> ctx.Wait
-//            )
-//        member this.AfterResetAsync(ctx : IDialogContext) (argument : IAwaitable<bool>) =
-//            Task.Factory.StartNew(fun() ->
-//                let confirm = argument.GetAwaiter().GetResult()
-//                
-//                match confirm with
-//                | true -> 
-//                    this.count <- 0
-//                    "Reset count." |> ctx.PostAsync |> ignore
-//                | false -> "Did not reset count" |> ctx.PostAsync |> ignore
-//
-//                ResumeAfter(this.MessageRecived) |> ctx.Wait
-//            )
-//
-//        interface IDialog with
-//            member this.StartAsync ctx =
-//                    Task.Factory.StartNew(fun () ->
-//                        ResumeAfter(this.MessageRecived) |> ctx.Wait
-//                    )
-
-                
     let botHandler (msg : Activity) =
         printfn "Handling the message from the bot with text -> \"%s\"" msg.Text
         async {
@@ -78,14 +43,14 @@ module LuisBot =
             m
         } |> Async.RunSynchronously 
         
-    let helloWorld _ = 
+    let hearbeet _ = 
         printfn "Saying hello world from F# and flynn %O" DateTime.UtcNow
         OK (sprintf "<html><body><h1>Hello World from %O</h1></body></html>" DateTime.UtcNow)
 
     let app = 
         choose [
             POST >=> path "/api/messages" >=> request (getResourceFromReq >> botHandler >> toJson )
-            GET >=> path "/api/heartbeet" >=> request helloWorld]
+            GET >=> path "/heartbeet" >=> request hearbeet]
 
     let config = 
         let port = System.Environment.GetEnvironmentVariable("PORT")

@@ -41,7 +41,6 @@ module SimpleAlarm =
         let defaultTitleEntity() = EntityRecommendation(``type`` = alarmTitle, entity = defaultAlarm.What)
         let defaultDateEntity() = EntityRecommendation(``type`` = alarmStartDate, entity = String.Empty)
         let defaultTimeEntity() = EntityRecommendation(``type`` = alarmStartTime, entity = String.Empty)
-
     
     module AlarmHelpers =
         let tryFindAlarm (result : LuisResult) (alarmMap : AlarmMap) =
@@ -112,16 +111,18 @@ module SimpleAlarm =
 
         let sendMessage (context : IDialogContext) (message : string) = context.PostAsync(message) |> awaitTask
 
-        //let sendMessageAndWaitForNextMessage (context : IDialogContext) messageReceivedCallback (message : string) = async {
-        //    message |> sendMessage(context)
-        //    messageReceivedCallback |> context.Wait
-        //}
+        let sendMessageAndWaitForNextMessage (context : IDialogContext) messageReceivedCallback (message : string) = async {
+           message |> sendMessage(context)
+           ResumeAfter(messageReceivedCallback) |> context.Wait
+        }
         
         member val alarmMap = Map.empty<string, Alarm> with get, set
 
         member this.MessageReceived context messageActivity = 
             printf "--> Message received"
-            base.MessageReceived(context, messageActivity)
+            let ret = base.MessageReceived(context, messageActivity)
+            printfn "The map of alarms is %A" this.alarmMap
+            ret
 
         [<LuisIntent("")>]
         member this.None (context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
@@ -130,10 +131,7 @@ module SimpleAlarm =
             let message = sprintf "Sorry I did not understand: %s" intentString
 
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         [<LuisIntent("builtin.intent.alarm.delete_alarm")>]
@@ -145,36 +143,27 @@ module SimpleAlarm =
                 | None -> sprintf "Did not find alarm"
 
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         [<LuisIntent("builtin.intent.alarm.find_alarm")>]
         member this.FindAlarm (context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
             let message = match AlarmHelpers.tryFindAlarm result this.alarmMap with
-                | Some alarm -> sprintf "Found alarm %O" alarm 
+                | Some alarm -> sprintf "Found alarm %A" alarm 
                 | None -> sprintf "Did not find alarm"
 
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         [<LuisIntent("builtin.intent.alarm.set_alarm")>]
         member this.SetAlarm (context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
             let message = match AlarmHelpers.setAlarm result this.alarmMap with
-                | Some (updatedMap, alarm) -> sprintf "Alarm %O created" alarm
+                | Some (updatedMap, alarm) -> sprintf "Alarm %A created" alarm
                 | None -> "Count not find time in alarm"
 
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         [<LuisIntent("builtin.intent.alarm.snooze")>]
@@ -182,28 +171,22 @@ module SimpleAlarm =
             let message = match AlarmHelpers.snoozeAlarm result this.alarmMap with
                 | Some (updatedMap, alarm) ->
                     this.alarmMap <- updatedMap
-                    sprintf "Alarm %O snoozed" alarm
+                    sprintf "Alarm %A snoozed" alarm
                 | None -> "Did not find alarm"
             
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         [<LuisIntent("builtin.intent.alarm.time_remaining")>]
         member this.TimeRemainingInAlarm (context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
             let message = match AlarmHelpers.timeRemainingForAlarm result this.alarmMap with
-                | AlarmFound (alarm, timespan) -> sprintf "There is %O remaining for alarm %O" timespan alarm
-                | AlarmExpired alarm -> sprintf "The alarm %O expired already" alarm
+                | AlarmFound (alarm, timespan) -> sprintf "There is %A remaining for alarm %A" timespan alarm
+                | AlarmExpired alarm -> sprintf "The alarm %A expired already" alarm
                 | AlarmNotFound -> "Did not find alarm"
 
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         [<LuisIntent("builtin.intent.alarm.turn_off_alarm")>]
@@ -212,22 +195,16 @@ module SimpleAlarm =
             let message = match AlarmHelpers.turnOffAlarm result this.alarmMap with
                 | Some (updatedMap, alarm) ->
                     this.alarmMap <- updatedMap
-                    sprintf "Ok, alarm %O was disabled" alarm
+                    sprintf "Ok, alarm %A was disabled" alarm
                 | None -> sprintf "Did not find alarm"
 
             message
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
 
         
         [<LuisIntent("builtin.intent.alarm.alarm_other")>]
         member this.AlarmOther(context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
             "What ?"
-            |> sendMessage(context)
-
-            ResumeAfter(this.MessageReceived)
-            |> context.Wait
+            |> sendMessageAndWaitForNextMessage context this.MessageReceived
         })
