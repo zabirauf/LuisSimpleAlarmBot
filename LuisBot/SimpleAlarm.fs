@@ -97,8 +97,8 @@ module SimpleAlarm =
             | Some alarm -> AlarmExpired alarm
             | _ -> AlarmNotFound
 
-        let turnOffAlarm (result : LuisResult) (alarmMap : AlarmMap) = 
-            match tryFindAlarm result alarmMap with
+        let turnOffAlarm (alarm : Alarm) (alarmMap : AlarmMap) = 
+            match alarmMap.TryFind(alarm.What) with
             | Some alarm -> 
                 Some (alarmMap.Remove(alarm.What), alarm)
             | None -> None
@@ -112,11 +112,6 @@ module SimpleAlarm =
 
         let sendMessage (context : IDialogContext) (message : string) = context.PostAsync(message) |> awaitTask
 
-//        let sendMessageAndWaitForNextMessage (context : IDialogContext) messageReceivedCallback (message : string) = async {
-//           message |> sendMessage(context)
-//           ResumeAfter(messageReceivedCallback) |> context.Wait
-//        }
-        
         let toMap dictionary = 
             (dictionary :> seq<_>)
             |> Seq.map (|KeyValue|)
@@ -127,17 +122,13 @@ module SimpleAlarm =
         member this.getAlarmMap() = toMap this.alarmDict
 
         member this.setAlarmMap(updatedMap : AlarmMap) = 
-            printfn "Going to update to map  %A" updatedMap 
             let dictin = Dictionary<string, Alarm>()
             updatedMap |> Map.iter (fun key value -> dictin.Add(key, value))
             this.alarmDict <- dictin
             printfn "Updated dict to %A" this.alarmDict
 
-        member this.MessageReceived context messageActivity = 
-            printf "--> Message received"
-            let ret = base.MessageReceived(context, messageActivity)
-            printfn "The map of alarms is %A" (this.getAlarmMap())
-            ret
+        member this.MessageReceived context messageActivity = base.MessageReceived(context, messageActivity)
+            
 
         [<LuisIntent("")>]
         member this.None (context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
@@ -226,12 +217,26 @@ module SimpleAlarm =
 
         [<LuisIntent("builtin.intent.alarm.turn_off_alarm")>]
         member this.TurnOffAlarm (context : IDialogContext) (result : LuisResult) = Async.startAsPlainTask (async {
-            // PromptDialog.Confirm(context, ResumeAfter(this.AfterConfirmingTurnOffAlarm), "Are you sure?", promptStyle = PromptStyle.None)
-            let message = match AlarmHelpers.turnOffAlarm result (this.getAlarmMap()) with
-                | Some (updatedMap, alarm) ->
-                    updatedMap |> this.setAlarmMap
-                    sprintf "Ok, alarm %A was disabled" alarm
-                | None -> sprintf "Did not find alarm"
+            match AlarmHelpers.tryFindAlarm result (this.getAlarmMap()) with
+                | Some alarm ->
+                    PromptDialog.Confirm(context, ResumeAfter(this.AfterConfirmingTurnOffAlarm alarm), "Are you sure?", promptStyle = PromptStyle.None)
+                | None -> 
+                    sprintf "Did not find alarm"
+                    |> sendMessage(context)
+
+                    ResumeAfter(this.MessageReceived)
+                    |> context.Wait
+        })
+
+        member this.AfterConfirmingTurnOffAlarm (alarm : Alarm) (context : IDialogContext) (argument : IAwaitable<bool>) = Async.startAsPlainTask (async {
+            let confirmation = argument.GetAwaiter().GetResult()
+            let message = match confirmation with
+            | true ->
+                match AlarmHelpers.turnOffAlarm alarm (this.getAlarmMap()) with
+                | Some (updatedAlarmMap, _) -> updatedAlarmMap |> this.setAlarmMap
+
+                sprintf "Ok, alarm %A was disabled" alarm
+            | false -> "Ok! We haven't modified your alarms!"
 
             message
             |> sendMessage(context)
